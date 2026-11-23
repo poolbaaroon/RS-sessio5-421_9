@@ -70,6 +70,16 @@ def afegir_tasca(
     return tasca
 
 
+def cercar_tasca(tasques: list[Task], identificador: int) -> Task:
+    tasca = next(
+        (element for element in tasques if element.id == identificador),
+        None,
+    )
+    if tasca is None:
+        raise ValueError(ERROR_NO_TROBAT.format(identificador=identificador))
+    return tasca
+
+
 def editar_tasca(
     identificador: int,
     titol: str | None,
@@ -79,12 +89,7 @@ def editar_tasca(
     ruta: Path = RUTA_DADES,
 ) -> Task:
     tasques = carregar_tasques(ruta)
-    tasca = next(
-        (element for element in tasques if element.id == identificador),
-        None,
-    )
-    if tasca is None:
-        raise ValueError(ERROR_NO_TROBAT.format(identificador=identificador))
+    tasca = cercar_tasca(tasques, identificador)
 
     if titol is not None:
         tasca.titol = titol
@@ -96,6 +101,15 @@ def editar_tasca(
         tasca.estat = estat
 
     desar_tasques(tasques, ruta)
+    return tasca
+
+
+def completar_tasca(identificador: int, ruta: Path = RUTA_DADES) -> Task:
+    tasques = carregar_tasques(ruta)
+    tasca = cercar_tasca(tasques, identificador)
+    if tasca.estat != "completada":
+        tasca.estat = "completada"
+        desar_tasques(tasques, ruta)
     return tasca
 
 
@@ -133,15 +147,28 @@ def crear_parser() -> argparse.ArgumentParser:
     editar.add_argument("--due", help="Nova data límit (YYYY-MM-DD).")
     editar.add_argument("--status", help="Nou estat (pendent o completada).")
 
+    completar = subcomandaments.add_parser(
+        "complete", help="Marca una tasca com a completada."
+    )
+    completar.add_argument("--id", help="ID de la tasca a completar.")
+
     subcomandaments.add_parser("list", help="Mostra totes les tasques.")
     return parser
 
 
+def validar_argument_id(identificador: str | None) -> int:
+    if identificador is None:
+        raise ValueError(ERROR_ID_FALTA)
+    if not validar_id(identificador):
+        raise ValueError(ERROR_ID_NO_VALID)
+    return int(identificador)
+
+
 def processar_edit(arguments: argparse.Namespace) -> int:
-    if arguments.id is None:
-        return rebutjar(ERROR_ID_FALTA)
-    if not validar_id(arguments.id):
-        return rebutjar(ERROR_ID_NO_VALID)
+    try:
+        identificador = validar_argument_id(arguments.id)
+    except ValueError as error:
+        return rebutjar(str(error))
     if (
         arguments.title is None
         and arguments.subject is None
@@ -156,7 +183,7 @@ def processar_edit(arguments: argparse.Namespace) -> int:
 
     try:
         tasca = editar_tasca(
-            int(arguments.id),
+            identificador,
             arguments.title,
             arguments.subject,
             arguments.due,
@@ -166,6 +193,17 @@ def processar_edit(arguments: argparse.Namespace) -> int:
         return rebutjar(str(error))
 
     print(f"Tasca [ID: {tasca.id}] actualitzada amb èxit")
+    return 0
+
+
+def processar_complete(arguments: argparse.Namespace) -> int:
+    try:
+        identificador = validar_argument_id(arguments.id)
+        tasca = completar_tasca(identificador)
+    except ValueError as error:
+        return rebutjar(str(error))
+
+    print(f"Tasca [ID: {tasca.id}] marcada com a completada")
     return 0
 
 
@@ -184,6 +222,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Tasca [ID: {tasca.id}] creada amb èxit")
     elif arguments.comandament == "edit":
         return processar_edit(arguments)
+    elif arguments.comandament == "complete":
+        return processar_complete(arguments)
     else:
         print(llistar_tasques())
     return 0

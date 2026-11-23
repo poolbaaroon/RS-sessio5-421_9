@@ -426,3 +426,91 @@ def test_edit_preserva_registre_sense_data_limit(
     assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [
         {**registre_antic, "titol": "Pràctica final"}
     ]
+
+
+def test_gs13_completar_tasca_i_conservar_canvi(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    escriure_registres(ruta_tasques, [TASCA_INICIAL])
+
+    assert main(["complete", "--id", "1"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "Tasca [ID: 1] marcada com a completada\n"
+    assert captura.err == ""
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [
+        {**TASCA_INICIAL, "estat": "completada"}
+    ]
+
+
+def test_gs21_rebutjar_complete_sense_id(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comprovar_rebuig(
+        ["complete"],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: cal indicar l'ID de la tasca amb --id.",
+        capsys,
+    )
+
+
+@pytest.mark.parametrize("identificador", ["abc", "0", "-1"])
+def test_gs22_complete_rebutja_id_no_enter_positiu(
+    identificador: str,
+    ruta_tasques: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comprovar_rebuig(
+        ["complete", "--id", identificador],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: l'ID ha de ser un enter positiu.",
+        capsys,
+    )
+
+
+def test_gs25_rebutjar_complete_amb_id_inexistent(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comprovar_rebuig(
+        ["complete", "--id", "99"],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: no existeix cap tasca amb ID 99.",
+        capsys,
+    )
+
+
+def test_gs26_completar_tasca_ja_completada(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tasca_completada = {**TASCA_INICIAL, "estat": "completada"}
+    escriure_registres(ruta_tasques, [tasca_completada])
+    contingut = ruta_tasques.read_bytes()
+
+    assert main(["complete", "--id", "1"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "Tasca [ID: 1] marcada com a completada\n"
+    assert captura.err == ""
+    assert ruta_tasques.read_bytes() == contingut
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [tasca_completada]
+
+
+def test_complete_preserva_registre_sense_data_limit(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registre_antic = {
+        "id": 1,
+        "titol": "Pràctica 1",
+        "assignatura": "RS",
+        "estat": "pendent",
+    }
+    escriure_registres(ruta_tasques, [registre_antic])
+
+    assert main(["complete", "--id", "1"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "Tasca [ID: 1] marcada com a completada\n"
+    assert captura.err == ""
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [
+        {**registre_antic, "estat": "completada"}
+    ]
