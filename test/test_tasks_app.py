@@ -11,6 +11,7 @@ from src.tasks_app import main
 
 
 RUTA_RELATIVA = Path("data") / "tasks.json"
+DATA_REFERENCIA = date(2026, 11, 23)
 
 
 @pytest.fixture
@@ -19,6 +20,12 @@ def ruta_tasques(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     ruta = tmp_path / RUTA_RELATIVA
     ruta.parent.mkdir(parents=True, exist_ok=True)
     return ruta
+
+
+@pytest.fixture
+def avui_fix(monkeypatch: pytest.MonkeyPatch) -> date:
+    monkeypatch.setattr("src.tasks_app.data_actual", lambda: DATA_REFERENCIA)
+    return DATA_REFERENCIA
 
 
 def escriure_registres(ruta: Path, registres: list[dict[str, Any]]) -> None:
@@ -51,6 +58,22 @@ def comprovar_rebuig(
     captura = capsys.readouterr()
     assert captura.out == ""
     assert captura.err == missatge + "\n"
+    assert ruta.read_bytes() == contingut
+
+
+def comprovar_llistat(
+    ruta: Path,
+    registre: dict[str, Any],
+    linia_esperada: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    escriure_registres(ruta, [registre])
+    contingut = ruta.read_bytes()
+
+    assert main(["list"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == linia_esperada + "\n"
+    assert captura.err == ""
     assert ruta.read_bytes() == contingut
 
 
@@ -522,7 +545,9 @@ def test_complete_preserva_registre_sense_data_limit(
 
 
 def test_gs08_llistar_tasca_antiga_sense_data_limit(
-    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     registre_antic = {
         "id": 1,
@@ -542,7 +567,9 @@ def test_gs08_llistar_tasca_antiga_sense_data_limit(
 
 
 def test_gs19_llistar_tasca_amb_data_limit_null(
-    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     registre = {**TASCA_INICIAL, "data_limit": None}
     escriure_registres(ruta_tasques, [registre])
@@ -557,7 +584,9 @@ def test_gs19_llistar_tasca_amb_data_limit_null(
 
 
 def test_llistat_amb_data_limit(
-    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     escriure_registres(ruta_tasques, [TASCA_INICIAL])
     contingut = ruta_tasques.read_bytes()
@@ -572,7 +601,9 @@ def test_llistat_amb_data_limit(
 
 
 def test_llistat_de_tasca_completada(
-    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     registre = {
         **TASCA_INICIAL,
@@ -590,7 +621,9 @@ def test_llistat_de_tasca_completada(
 
 
 def test_llistat_conserva_ordre_i_fitxer(
-    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     registres = [
         TASCA_INICIAL,
@@ -637,3 +670,72 @@ def test_llistat_data_a_mes_de_set_dies(
         f"[1] Pràctica 1 (RS) - estat: pendent - data límit: {data_llunyana}\n"
     )
     assert captura.err == ""
+
+
+def test_gs14_mostrar_tasca_caducada(
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comprovar_llistat(
+        ruta_tasques,
+        {**TASCA_INICIAL, "data_limit": "2026-11-22"},
+        "[1] Pràctica 1 (RS) - estat: pendent - data límit: 2026-11-22 [CADUCADA]",
+        capsys,
+    )
+
+
+def test_gs15_urgent_quan_venc_avui(
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comprovar_llistat(
+        ruta_tasques,
+        {**TASCA_INICIAL, "data_limit": "2026-11-23"},
+        "[1] Pràctica 1 (RS) - estat: pendent - data límit: 2026-11-23 [URGENT]",
+        capsys,
+    )
+
+
+def test_gs16_urgent_quan_venc_en_sis_dies(
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comprovar_llistat(
+        ruta_tasques,
+        {**TASCA_INICIAL, "data_limit": "2026-11-29"},
+        "[1] Pràctica 1 (RS) - estat: pendent - data límit: 2026-11-29 [URGENT]",
+        capsys,
+    )
+
+
+def test_gs17_sense_etiqueta_a_set_dies(
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comprovar_llistat(
+        ruta_tasques,
+        {**TASCA_INICIAL, "data_limit": "2026-11-30"},
+        "[1] Pràctica 1 (RS) - estat: pendent - data límit: 2026-11-30",
+        capsys,
+    )
+
+
+def test_gs18_sense_etiqueta_en_completada(
+    ruta_tasques: Path,
+    avui_fix: date,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comprovar_llistat(
+        ruta_tasques,
+        {
+            **TASCA_INICIAL,
+            "estat": "completada",
+            "data_limit": "2026-11-20",
+        },
+        "[1] Pràctica 1 (RS) - estat: completada - data límit: 2026-11-20",
+        capsys,
+    )

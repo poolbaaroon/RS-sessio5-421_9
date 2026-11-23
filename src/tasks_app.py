@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Sequence
 
@@ -118,20 +119,42 @@ def rebutjar(missatge: str) -> int:
     return 2
 
 
-def formatar_tasca(tasca: Task) -> str:
+def data_actual() -> date:
+    return date.today()
+
+
+def etiqueta_tasca(tasca: Task, avui: date | None = None) -> str:
+    if tasca.estat != "pendent" or tasca.data_limit is None:
+        return ""
+    try:
+        data_limit = date.fromisoformat(tasca.data_limit)
+    except ValueError:
+        return ""
+    if avui is None:
+        avui = data_actual()
+    dies = (data_limit - avui).days
+    if dies < 0:
+        return " [CADUCADA]"
+    if dies <= 6:
+        return " [URGENT]"
+    return ""
+
+
+def formatar_tasca(tasca: Task, avui: date | None = None) -> str:
     linia = (
         f"[{tasca.id}] {tasca.titol} ({tasca.assignatura}) - estat: {tasca.estat}"
     )
     if tasca.data_limit is not None:
         linia += f" - data límit: {tasca.data_limit}"
-    return linia
+    return linia + etiqueta_tasca(tasca, avui)
 
 
 def llistar_tasques(ruta: Path = RUTA_DADES) -> str:
     tasques = carregar_tasques(ruta)
     if not tasques:
         return "Registre de tasques buit."
-    return "\n".join(formatar_tasca(tasca) for tasca in tasques)
+    avui = data_actual()
+    return "\n".join(formatar_tasca(tasca, avui) for tasca in tasques)
 
 
 def crear_parser() -> argparse.ArgumentParser:
