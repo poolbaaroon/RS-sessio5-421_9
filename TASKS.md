@@ -46,7 +46,7 @@ Referència: apartat 6 de SPECIFICATIONS.md.
 
 ### Tasques d'execució
 
-- [ ] Tasca 2.1: Ampliar el model de tasca amb l'atribut opcional `data_limit` i actualitzar la serialització i deserialització JSON. Conservar els atributs existents i admetre registres antics sense `data_limit` o amb valor `null`, sense assignar-los dates automàticament. Afegir proves del model per verificar la conversió d'anada i tornada amb data, sense data i amb valor `null`. (RF-08 i RF-22; apartat 6.6)
+- [x] Tasca 2.1: Ampliar el model de tasca amb l'atribut opcional `data_limit` i actualitzar la serialització i deserialització JSON. Conservar els atributs existents i admetre registres antics sense `data_limit` o amb valor `null`, sense assignar-los dates automàticament. Afegir proves del model per verificar la conversió d'anada i tornada amb data, sense data i amb valor `null`. (RF-08 i RF-22; apartat 6.6)
 
 - [ ] Tasca 2.2: Implementar validacions reutilitzables per a dates en format exacte `YYYY-MM-DD`, dates existents al calendari, IDs enters positius i estats `pendent` o `completada`. Permetre dates passades. Afegir proves unitàries de valors vàlids i invàlids, incloent-hi `2026-02-30`, `10/12/2026`, IDs no numèrics, zero i negatius. Aquesta tasca verifica les validacions internes; la seva integració amb els comandaments es comprovarà en les tasques següents. (RF-07 i RF-14; apartats 6.2 i 6.7)
 
