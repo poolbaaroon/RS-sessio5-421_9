@@ -118,14 +118,20 @@ def rebutjar(missatge: str) -> int:
     return 2
 
 
+def formatar_tasca(tasca: Task) -> str:
+    linia = (
+        f"[{tasca.id}] {tasca.titol} ({tasca.assignatura}) - estat: {tasca.estat}"
+    )
+    if tasca.data_limit is not None:
+        linia += f" - data límit: {tasca.data_limit}"
+    return linia
+
+
 def llistar_tasques(ruta: Path = RUTA_DADES) -> str:
     tasques = carregar_tasques(ruta)
     if not tasques:
         return "Registre de tasques buit."
-    return "\n".join(
-        f"[{tasca.id}] {tasca.titol} ({tasca.assignatura}) - estat: {tasca.estat}"
-        for tasca in tasques
-    )
+    return "\n".join(formatar_tasca(tasca) for tasca in tasques)
 
 
 def crear_parser() -> argparse.ArgumentParser:

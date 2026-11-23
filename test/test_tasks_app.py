@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -77,7 +78,9 @@ def test_gs02_llistat_buit(ruta_tasques: Path, capsys: pytest.CaptureFixture[str
     escriure_registres(ruta_tasques, [])
 
     assert main(["list"]) == 0
-    assert capsys.readouterr().out == "Registre de tasques buit.\n"
+    captura = capsys.readouterr()
+    assert captura.out == "Registre de tasques buit.\n"
+    assert captura.err == ""
 
 
 def test_gs03_llistat_amb_tasques(
@@ -102,10 +105,12 @@ def test_gs03_llistat_amb_tasques(
     )
 
     assert main(["list"]) == 0
-    assert capsys.readouterr().out == (
+    captura = capsys.readouterr()
+    assert captura.out == (
         "[1] Pràctica 1 (RS) - estat: pendent\n"
         "[2] Examen parcial (SO) - estat: pendent\n"
     )
+    assert captura.err == ""
 
 
 def test_gs04_crear_tasca_amb_data_limit(
@@ -514,3 +519,121 @@ def test_complete_preserva_registre_sense_data_limit(
     assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [
         {**registre_antic, "estat": "completada"}
     ]
+
+
+def test_gs08_llistar_tasca_antiga_sense_data_limit(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registre_antic = {
+        "id": 1,
+        "titol": "Pràctica 1",
+        "assignatura": "RS",
+        "estat": "pendent",
+    }
+    escriure_registres(ruta_tasques, [registre_antic])
+    contingut = ruta_tasques.read_bytes()
+
+    assert main(["list"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "[1] Pràctica 1 (RS) - estat: pendent\n"
+    assert captura.err == ""
+    assert ruta_tasques.read_bytes() == contingut
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [registre_antic]
+
+
+def test_gs19_llistar_tasca_amb_data_limit_null(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registre = {**TASCA_INICIAL, "data_limit": None}
+    escriure_registres(ruta_tasques, [registre])
+    contingut = ruta_tasques.read_bytes()
+
+    assert main(["list"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "[1] Pràctica 1 (RS) - estat: pendent\n"
+    assert captura.err == ""
+    assert ruta_tasques.read_bytes() == contingut
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [registre]
+
+
+def test_llistat_amb_data_limit(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    escriure_registres(ruta_tasques, [TASCA_INICIAL])
+    contingut = ruta_tasques.read_bytes()
+
+    assert main(["list"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == (
+        "[1] Pràctica 1 (RS) - estat: pendent - data límit: 2026-12-10\n"
+    )
+    assert captura.err == ""
+    assert ruta_tasques.read_bytes() == contingut
+
+
+def test_llistat_de_tasca_completada(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registre = {
+        **TASCA_INICIAL,
+        "estat": "completada",
+        "data_limit": "2026-11-20",
+    }
+    escriure_registres(ruta_tasques, [registre])
+
+    assert main(["list"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == (
+        "[1] Pràctica 1 (RS) - estat: completada - data límit: 2026-11-20\n"
+    )
+    assert captura.err == ""
+
+
+def test_llistat_conserva_ordre_i_fitxer(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registres = [
+        TASCA_INICIAL,
+        {
+            "id": 2,
+            "titol": "Examen parcial",
+            "assignatura": "SO",
+            "estat": "pendent",
+        },
+        {
+            "id": 3,
+            "titol": "Treball final",
+            "assignatura": "RS",
+            "estat": "completada",
+            "data_limit": "2026-12-20",
+        },
+    ]
+    escriure_registres(ruta_tasques, registres)
+    contingut = ruta_tasques.read_bytes()
+
+    assert main(["list"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == (
+        "[1] Pràctica 1 (RS) - estat: pendent - data límit: 2026-12-10\n"
+        "[2] Examen parcial (SO) - estat: pendent\n"
+        "[3] Treball final (RS) - estat: completada - data límit: 2026-12-20\n"
+    )
+    assert captura.err == ""
+    assert ruta_tasques.read_bytes() == contingut
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == registres
+
+
+def test_llistat_data_a_mes_de_set_dies(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_llunyana = (date.today() + timedelta(days=8)).isoformat()
+    assert (date.fromisoformat(data_llunyana) - date.today()).days == 8
+    registre = {**TASCA_INICIAL, "data_limit": data_llunyana}
+    escriure_registres(ruta_tasques, [registre])
+
+    assert main(["list"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == (
+        f"[1] Pràctica 1 (RS) - estat: pendent - data límit: {data_llunyana}\n"
+    )
+    assert captura.err == ""
