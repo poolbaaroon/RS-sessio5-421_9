@@ -258,3 +258,171 @@ def test_id_incremental_en_crear_tasca(
             "data_limit": "2026-12-15",
         },
     ]
+
+
+def test_gs09_modificar_titol_i_conservar_atributs(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    escriure_registres(ruta_tasques, [TASCA_INICIAL])
+
+    assert main(["edit", "--id", "1", "--title", "Pràctica final"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "Tasca [ID: 1] actualitzada amb èxit\n"
+    assert captura.err == ""
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [
+        {**TASCA_INICIAL, "titol": "Pràctica final"}
+    ]
+
+
+def test_gs10_modificar_diversos_atributs(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    escriure_registres(ruta_tasques, [TASCA_INICIAL])
+
+    assert main(
+        [
+            "edit",
+            "--id",
+            "1",
+            "--subject",
+            "SO",
+            "--due",
+            "2026-12-15",
+            "--status",
+            "completada",
+        ]
+    ) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "Tasca [ID: 1] actualitzada amb èxit\n"
+    assert captura.err == ""
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [
+        {
+            **TASCA_INICIAL,
+            "assignatura": "SO",
+            "estat": "completada",
+            "data_limit": "2026-12-15",
+        }
+    ]
+
+
+def test_gs11_rebutjar_modificacio_sense_canvis_parcials(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comprovar_rebuig(
+        ["edit", "--id", "1", "--title", "Títol modificat", "--due", "2026-02-30"],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: data límit no vàlida. "
+        "Utilitza YYYY-MM-DD amb una data existent.",
+        capsys,
+    )
+
+
+def test_gs12_rebutjar_id_inexistent(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comprovar_rebuig(
+        ["edit", "--id", "99", "--title", "Nou títol"],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: no existeix cap tasca amb ID 99.",
+        capsys,
+    )
+
+
+def test_gs20_rebutjar_edit_sense_id(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comprovar_rebuig(
+        ["edit", "--title", "Nou títol"],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: cal indicar l'ID de la tasca amb --id.",
+        capsys,
+    )
+
+
+@pytest.mark.parametrize("identificador", ["abc", "0", "-1"])
+def test_gs22_rebutjar_id_no_enter_positiu(
+    identificador: str,
+    ruta_tasques: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comprovar_rebuig(
+        ["edit", "--id", identificador, "--title", "Nou títol"],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: l'ID ha de ser un enter positiu.",
+        capsys,
+    )
+
+
+def test_gs23_rebutjar_edit_sense_atributs(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comprovar_rebuig(
+        ["edit", "--id", "1"],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: cal indicar almenys un atribut per modificar.",
+        capsys,
+    )
+
+
+def test_gs24_rebutjar_estat_no_admes(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comprovar_rebuig(
+        ["edit", "--id", "1", "--status", "acabada"],
+        ruta_tasques,
+        [TASCA_INICIAL],
+        "Error: estat no vàlid. Utilitza pendent o completada.",
+        capsys,
+    )
+
+
+def test_gs27_tornar_tasca_completada_a_pendent(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tasca_completada = {**TASCA_INICIAL, "estat": "completada"}
+    escriure_registres(ruta_tasques, [tasca_completada])
+
+    assert main(["edit", "--id", "1", "--status", "pendent"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "Tasca [ID: 1] actualitzada amb èxit\n"
+    assert captura.err == ""
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [TASCA_INICIAL]
+
+
+def test_edit_amb_data_passada(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    escriure_registres(ruta_tasques, [TASCA_INICIAL])
+
+    assert main(["edit", "--id", "1", "--due", "2026-11-22"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "Tasca [ID: 1] actualitzada amb èxit\n"
+    assert captura.err == ""
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [
+        {**TASCA_INICIAL, "data_limit": "2026-11-22"}
+    ]
+
+
+def test_edit_preserva_registre_sense_data_limit(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    registre_antic = {
+        "id": 1,
+        "titol": "Pràctica 1",
+        "assignatura": "RS",
+        "estat": "pendent",
+    }
+    escriure_registres(ruta_tasques, [registre_antic])
+
+    assert main(["edit", "--id", "1", "--title", "Pràctica final"]) == 0
+    captura = capsys.readouterr()
+    assert captura.out == "Tasca [ID: 1] actualitzada amb èxit\n"
+    assert captura.err == ""
+    assert json.loads(ruta_tasques.read_text(encoding="utf-8")) == [
+        {**registre_antic, "titol": "Pràctica final"}
+    ]

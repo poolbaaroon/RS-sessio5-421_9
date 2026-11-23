@@ -8,10 +8,10 @@ from typing import Sequence
 
 try:
     from .models import Task
-    from .validators import validar_data
+    from .validators import validar_data, validar_estat, validar_id
 except ImportError:
     from models import Task
-    from validators import validar_data
+    from validators import validar_data, validar_estat, validar_id
 
 RUTA_DADES = Path("data") / "tasks.json"
 ERROR_DUE = "Error: cal indicar la data límit amb --due."
@@ -19,6 +19,11 @@ ERROR_DATA = (
     "Error: data límit no vàlida. "
     "Utilitza YYYY-MM-DD amb una data existent."
 )
+ERROR_ID_FALTA = "Error: cal indicar l'ID de la tasca amb --id."
+ERROR_ID_NO_VALID = "Error: l'ID ha de ser un enter positiu."
+ERROR_NO_TROBAT = "Error: no existeix cap tasca amb ID {identificador}."
+ERROR_SENSE_ATRIBUTS = "Error: cal indicar almenys un atribut per modificar."
+ERROR_ESTAT = "Error: estat no vàlid. Utilitza pendent o completada."
 
 
 def assegurar_fitxer(ruta: Path = RUTA_DADES) -> None:
@@ -65,6 +70,40 @@ def afegir_tasca(
     return tasca
 
 
+def editar_tasca(
+    identificador: int,
+    titol: str | None,
+    assignatura: str | None,
+    data_limit: str | None,
+    estat: str | None,
+    ruta: Path = RUTA_DADES,
+) -> Task:
+    tasques = carregar_tasques(ruta)
+    tasca = next(
+        (element for element in tasques if element.id == identificador),
+        None,
+    )
+    if tasca is None:
+        raise ValueError(ERROR_NO_TROBAT.format(identificador=identificador))
+
+    if titol is not None:
+        tasca.titol = titol
+    if assignatura is not None:
+        tasca.assignatura = assignatura
+    if data_limit is not None:
+        tasca.data_limit = data_limit
+    if estat is not None:
+        tasca.estat = estat
+
+    desar_tasques(tasques, ruta)
+    return tasca
+
+
+def rebutjar(missatge: str) -> int:
+    print(missatge, file=sys.stderr)
+    return 2
+
+
 def llistar_tasques(ruta: Path = RUTA_DADES) -> str:
     tasques = carregar_tasques(ruta)
     if not tasques:
@@ -87,25 +126,64 @@ def crear_parser() -> argparse.ArgumentParser:
     afegir.add_argument("--subject", required=True, help="Assignatura de la tasca.")
     afegir.add_argument("--due", help="Data límit de la tasca (YYYY-MM-DD).")
 
+    editar = subcomandaments.add_parser("edit", help="Modifica una tasca existent.")
+    editar.add_argument("--id", help="ID de la tasca a modificar.")
+    editar.add_argument("--title", help="Nou títol de la tasca.")
+    editar.add_argument("--subject", help="Nova assignatura de la tasca.")
+    editar.add_argument("--due", help="Nova data límit (YYYY-MM-DD).")
+    editar.add_argument("--status", help="Nou estat (pendent o completada).")
+
     subcomandaments.add_parser("list", help="Mostra totes les tasques.")
     return parser
+
+
+def processar_edit(arguments: argparse.Namespace) -> int:
+    if arguments.id is None:
+        return rebutjar(ERROR_ID_FALTA)
+    if not validar_id(arguments.id):
+        return rebutjar(ERROR_ID_NO_VALID)
+    if (
+        arguments.title is None
+        and arguments.subject is None
+        and arguments.due is None
+        and arguments.status is None
+    ):
+        return rebutjar(ERROR_SENSE_ATRIBUTS)
+    if arguments.due is not None and not validar_data(arguments.due):
+        return rebutjar(ERROR_DATA)
+    if arguments.status is not None and not validar_estat(arguments.status):
+        return rebutjar(ERROR_ESTAT)
+
+    try:
+        tasca = editar_tasca(
+            int(arguments.id),
+            arguments.title,
+            arguments.subject,
+            arguments.due,
+            arguments.status,
+        )
+    except ValueError as error:
+        return rebutjar(str(error))
+
+    print(f"Tasca [ID: {tasca.id}] actualitzada amb èxit")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = crear_parser().parse_args(argv)
     if arguments.comandament == "add":
         if arguments.due is None:
-            print(ERROR_DUE, file=sys.stderr)
-            return 2
+            return rebutjar(ERROR_DUE)
         if not validar_data(arguments.due):
-            print(ERROR_DATA, file=sys.stderr)
-            return 2
+            return rebutjar(ERROR_DATA)
         tasca = afegir_tasca(
             arguments.title,
             arguments.subject,
             data_limit=arguments.due,
         )
         print(f"Tasca [ID: {tasca.id}] creada amb èxit")
+    elif arguments.comandament == "edit":
+        return processar_edit(arguments)
     else:
         print(llistar_tasques())
     return 0
