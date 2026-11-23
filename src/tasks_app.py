@@ -5,7 +5,7 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Sequence
+from typing import NoReturn, Sequence
 
 try:
     from .models import Task
@@ -25,6 +25,13 @@ ERROR_ID_NO_VALID = "Error: l'ID ha de ser un enter positiu."
 ERROR_NO_TROBAT = "Error: no existeix cap tasca amb ID {identificador}."
 ERROR_SENSE_ATRIBUTS = "Error: cal indicar almenys un atribut per modificar."
 ERROR_ESTAT = "Error: estat no vàlid. Utilitza pendent o completada."
+ERROR_ARGUMENTS = "Error: arguments incorrectes. Utilitza --help."
+
+
+class AnalitzadorArguments(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        print(ERROR_ARGUMENTS, file=sys.stderr)
+        raise SystemExit(2)
 
 
 def assegurar_fitxer(ruta: Path = RUTA_DADES) -> None:
@@ -158,7 +165,7 @@ def llistar_tasques(ruta: Path = RUTA_DADES) -> str:
 
 
 def crear_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = AnalitzadorArguments(
         prog="tasks_app",
         description="Gestió de tasques acadèmiques.",
     )

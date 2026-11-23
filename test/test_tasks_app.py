@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -11,7 +13,9 @@ from src.tasks_app import main
 
 
 RUTA_RELATIVA = Path("data") / "tasks.json"
+RUTA_SCRIPT = Path(__file__).resolve().parents[1] / "src" / "tasks_app.py"
 DATA_REFERENCIA = date(2026, 11, 23)
+ERROR_ARGUMENTS = "Error: arguments incorrectes. Utilitza --help."
 
 
 @pytest.fixture
@@ -74,6 +78,58 @@ def comprovar_llistat(
     captura = capsys.readouterr()
     assert captura.out == linia_esperada + "\n"
     assert captura.err == ""
+    assert ruta.read_bytes() == contingut
+
+
+def comprovar_error_arguments(
+    arguments: list[str],
+    ruta: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    escriure_registres(ruta, [TASCA_INICIAL])
+    contingut = ruta.read_bytes()
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(arguments)
+    assert excinfo.value.code == 2
+    captura = capsys.readouterr()
+    assert captura.out == ""
+    assert captura.err == ERROR_ARGUMENTS + "\n"
+    assert ruta.read_bytes() == contingut
+
+
+def preparar_cli(
+    directori: Path, registres: list[dict[str, Any]] | None = None
+) -> Path:
+    ruta = directori / RUTA_RELATIVA
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    escriure_registres(ruta, [TASCA_INICIAL] if registres is None else registres)
+    return ruta
+
+
+def executar_cli(
+    directori: Path, arguments: list[str]
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(RUTA_SCRIPT), *arguments],
+        cwd=directori,
+        capture_output=True,
+        text=True,
+    )
+
+
+def comprovar_rebuig_cli(
+    directori: Path, arguments: list[str], missatge: str
+) -> None:
+    ruta = preparar_cli(directori)
+    contingut = ruta.read_bytes()
+
+    resultat = executar_cli(directori, arguments)
+    assert (resultat.returncode, resultat.stdout, resultat.stderr) == (
+        2,
+        "",
+        missatge + "\n",
+    )
     assert ruta.read_bytes() == contingut
 
 
@@ -739,3 +795,192 @@ def test_gs18_sense_etiqueta_en_completada(
         "[1] Pràctica 1 (RS) - estat: completada - data límit: 2026-11-20",
         capsys,
     )
+
+
+def test_gs29_opcio_desconeguda(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    comprovar_error_arguments(["list", "--desconeguda"], ruta_tasques, capsys)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["add", "--title", "Prova", "--subject", "RS", "--due"],
+        ["edit", "--id"],
+        ["complete", "--id"],
+        ["desconegut"],
+        ["add", "--subject", "RS", "--due", "2026-12-10"],
+        ["add", "--title", "Prova", "--due", "2026-12-10"],
+        [],
+    ],
+)
+def test_errors_generals_arguments(
+    arguments: list[str],
+    ruta_tasques: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    comprovar_error_arguments(arguments, ruta_tasques, capsys)
+
+
+def test_help_continua_funcionant(
+    ruta_tasques: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    escriure_registres(ruta_tasques, [TASCA_INICIAL])
+    contingut = ruta_tasques.read_bytes()
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--help"])
+    assert excinfo.value.code == 0
+    captura = capsys.readouterr()
+    assert captura.err == ""
+    assert "usage:" in captura.out
+    assert ruta_tasques.read_bytes() == contingut
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["list", "--desconeguda"],
+        ["add", "--title", "Prova", "--subject", "RS", "--due"],
+        ["edit", "--id"],
+        ["complete", "--id"],
+        ["desconegut"],
+        ["add", "--subject", "RS", "--due", "2026-12-10"],
+        [],
+    ],
+)
+def test_cli_errors_generals(
+    arguments: list[str], tmp_path: Path
+) -> None:
+    comprovar_rebuig_cli(tmp_path, arguments, ERROR_ARGUMENTS)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "missatge"),
+    [
+        (
+            ["add", "--title", "Prova", "--subject", "RS"],
+            "Error: cal indicar la data límit amb --due.",
+        ),
+        (
+            ["add", "--title", "Prova", "--subject", "RS", "--due", "2026-02-30"],
+            "Error: data límit no vàlida. Utilitza YYYY-MM-DD amb una data existent.",
+        ),
+        (
+            ["edit", "--title", "Nou títol"],
+            "Error: cal indicar l'ID de la tasca amb --id.",
+        ),
+        (
+            ["edit", "--id", "abc", "--title", "Nou títol"],
+            "Error: l'ID ha de ser un enter positiu.",
+        ),
+        (
+            ["edit", "--id", "99", "--title", "Nou títol"],
+            "Error: no existeix cap tasca amb ID 99.",
+        ),
+        (
+            ["edit", "--id", "1"],
+            "Error: cal indicar almenys un atribut per modificar.",
+        ),
+        (
+            ["edit", "--id", "1", "--status", "inicial"],
+            "Error: estat no vàlid. Utilitza pendent o completada.",
+        ),
+        (
+            ["complete", "--id", "0"],
+            "Error: l'ID ha de ser un enter positiu.",
+        ),
+        (
+            ["complete", "--id", "99"],
+            "Error: no existeix cap tasca amb ID 99.",
+        ),
+    ],
+)
+def test_cli_missatges_especifices_continuen(
+    arguments: list[str], missatge: str, tmp_path: Path
+) -> None:
+    comprovar_rebuig_cli(tmp_path, arguments, missatge)
+
+
+def test_cli_llistat_correcte(tmp_path: Path) -> None:
+    data_llunyana = (date.today() + timedelta(days=8)).isoformat()
+    registre = {**TASCA_INICIAL, "data_limit": data_llunyana}
+    ruta = preparar_cli(tmp_path, [registre])
+
+    resultat = executar_cli(tmp_path, ["list"])
+    assert (resultat.returncode, resultat.stderr) == (0, "")
+    assert resultat.stdout == (
+        f"[1] Pràctica 1 (RS) - estat: pendent - data límit: {data_llunyana}\n"
+    )
+    assert ruta.read_bytes() == json.dumps(
+        [registre], ensure_ascii=False, indent=2
+    ).encode("utf-8")
+
+
+def test_cli_help_sortida_zero(tmp_path: Path) -> None:
+    ruta = preparar_cli(tmp_path)
+    contingut = ruta.read_bytes()
+
+    resultat = executar_cli(tmp_path, ["--help"])
+    assert (resultat.returncode, resultat.stderr) == (0, "")
+    assert "usage:" in resultat.stdout
+    assert ruta.read_bytes() == contingut
+
+    resultat = executar_cli(tmp_path, ["list", "--help"])
+    assert (resultat.returncode, resultat.stderr) == (0, "")
+    assert "usage:" in resultat.stdout
+    assert ruta.read_bytes() == contingut
+
+
+def test_cli_operacions_correctes(tmp_path: Path) -> None:
+    data_llunyana = (date.today() + timedelta(days=8)).isoformat()
+    registre_pendent = {**TASCA_INICIAL, "data_limit": data_llunyana}
+    ruta = preparar_cli(tmp_path, [registre_pendent])
+
+    afegir = executar_cli(
+        tmp_path,
+        [
+            "add",
+            "--title",
+            "Pràctica 2",
+            "--subject",
+            "SO",
+            "--due",
+            "2030-01-01",
+        ],
+    )
+    assert (afegir.returncode, afegir.stdout, afegir.stderr) == (
+        0,
+        "Tasca [ID: 2] creada amb èxit\n",
+        "",
+    )
+
+    editar = executar_cli(
+        tmp_path, ["edit", "--id", "2", "--title", "Pràctica 2 bis"]
+    )
+    assert (editar.returncode, editar.stdout, editar.stderr) == (
+        0,
+        "Tasca [ID: 2] actualitzada amb èxit\n",
+        "",
+    )
+
+    completar = executar_cli(tmp_path, ["complete", "--id", "2"])
+    assert (completar.returncode, completar.stdout, completar.stderr) == (
+        0,
+        "Tasca [ID: 2] marcada com a completada\n",
+        "",
+    )
+
+    llistar = executar_cli(tmp_path, ["list"])
+    assert (llistar.returncode, llistar.stderr) == (0, "")
+    assert llistar.stdout == (
+        f"[1] Pràctica 1 (RS) - estat: pendent - data límit: {data_llunyana}\n"
+        "[2] Pràctica 2 bis (SO) - estat: completada - data límit: 2030-01-01\n"
+    )
+
+    registres = json.loads(ruta.read_text(encoding="utf-8"))
+    assert [registre["id"] for registre in registres] == [1, 2]
+    assert registres[0] == registre_pendent
+    assert registres[1]["titol"] == "Pràctica 2 bis"
+    assert registres[1]["estat"] == "completada"
